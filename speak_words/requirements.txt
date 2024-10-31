@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+boto3
+google-auth
+google-auth-oauthlib
+google-cloud-texttospeech

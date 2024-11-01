@@ -49,6 +49,25 @@ relevant_keywords = ["trend", "increase", "decrease",
                      "significant", "observed", "conclusion"]
 
 
+def process_request(qtext, tags, image_type, response_text):
+    """
+    Process the request with the given parameters.
+    """
+    # Example logic to process the parameters
+    # You can implement the necessary checks and processing logic here
+    result = {
+        "qtext": qtext,
+        "tags": tags,
+        "image_type": image_type,
+        "response_text": response_text,
+    }
+
+    # Perform processing and return result
+    # Assuming this function is processing a template confidence score or similar
+    # Replace with your actual logic
+    return {"success": True, "data": result}
+
+
 # Set up TF-IDF vectorizer for the template pool
 vectorizer = TfidfVectorizer().fit(template_pool)
 

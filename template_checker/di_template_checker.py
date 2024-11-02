@@ -4,6 +4,10 @@ import spacy
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from utils.mod_logging import log_info, log_error  # Import the logging functions
+
+# command to run sgb@SGBs-Laptop pte_api % python3 -m template_checker.di_template_checker
+api_name = "template_checker_di"
 
 # Load spaCy model
 nlp = spacy.load('en_core_web_sm')
@@ -49,23 +53,36 @@ relevant_keywords = ["trend", "increase", "decrease",
                      "significant", "observed", "conclusion"]
 
 
-def process_request(qtext, tags, image_type, response_text):
+def process_request(request_id, hostname, username, qid, qtext, tags, image_type, response_text):
     """
-    Process the request with the given parameters.
+    Process the request with the given parameters and calculate template confidence.
     """
-    # Example logic to process the parameters
-    # You can implement the necessary checks and processing logic here
-    result = {
-        "qtext": qtext,
-        "tags": tags,
-        "image_type": image_type,
-        "response_text": response_text,
-    }
+    log_info(api_name, {
+        "Request Info": {
+            "Request ID": request_id,
+            "Hostname": hostname,
+            "Username": username,
+            "QID": qid,
+            "Details": {
+                "qtext": qtext,
+                "tags": tags,
+                "image_type": image_type,
+                "response_text": response_text
+            }
+        }
+    })
 
-    # Perform processing and return result
-    # Assuming this function is processing a template confidence score or similar
-    # Replace with your actual logic
-    return {"success": True, "data": result}
+    template_confidence = compute_template_score(
+        response_text, image_type, tags, template_phrases, relevant_keywords
+    )
+
+    log_info(api_name, {
+        "Request ID": request_id,
+        "Template Confidence Score": template_confidence,
+        "Interpretation": interpret_template_score(template_confidence)
+    })
+
+    return {"success": True, "template_confidence": template_confidence}
 
 
 # Set up TF-IDF vectorizer for the template pool
@@ -86,7 +103,8 @@ def check_template_pool_similarity(response, template_pool):
     max_similarity = np.max(similarities)
 
     # Log the maximum similarity
-    print(f"Max Cosine Similarity with Template Pool: {max_similarity:.2f}")
+    log_info(
+        api_name, f"Max Cosine Similarity with Template Pool: {max_similarity:.2f}")
 
     # Return whether the similarity exceeds the threshold and the max similarity score
     return max_similarity >= template_pool_threshold, max_similarity
@@ -119,10 +137,11 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
             response, template_pool)
 
         # Log the similarity score
-        print(f"Template Matching Similarity Score: {similarity_score:.2f}")
+        log_info(
+            api_name, f"Template Matching Similarity Score: {similarity_score:.2f}")
 
         if is_similar:
-            print("Response is very similar to a known template.")
+            log_info(api_name, "Response is very similar to a known template.")
             template_confidence = 1.0  # Set template_confidence to 1
             return template_confidence  # Stop further processing
 
@@ -132,7 +151,7 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         matches = [phrase for phrase in template_phrases if re.search(
             re.escape(phrase), response, re.IGNORECASE)]
         score = min(len(matches) / len(template_phrases), 1)
-        print(f"Template Phrase Matches: {matches}")
+        log_info(api_name, f"Template Phrase Matches: {matches}")
         return score
 
     def check_keyword_relevancy(response, relevant_keywords):
@@ -140,7 +159,7 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         matches = [keyword for keyword in relevant_keywords if response_lemmas & {
             lemma.lemma_ for lemma in nlp(keyword)}]
         score = 1 - (len(matches) / len(relevant_keywords))
-        print(f"Relevant Keyword Matches: {matches}")
+        log_info(api_name, f"Relevant Keyword Matches: {matches}")
         return score
 
     def measure_repetition(response):
@@ -149,21 +168,21 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         repeated_words = {word: count for word,
                           count in word_counts.items() if count > 1}
         score = sum(count - 1 for count in repeated_words.values()) / len(words)
-        print(f"Repeated Words: {repeated_words}")
+        log_info(api_name, f"Repeated Words: {repeated_words}")
         return score
 
     def calculate_uniqueness(response):
         words = re.findall(r'\w+', response.lower())
         unique_words = set(words)
         score = 1 - (len(unique_words) / len(words))
-        print(f"Unique Words: {unique_words}")
+        log_info(api_name, f"Unique Words: {unique_words}")
         return score
 
     def calculate_lexical_diversity(response):
         words = re.findall(r'\w+', response.lower())
         unique_words = set(words)
         score = len(unique_words) / len(words)
-        print(f"Lexical Diversity - Unique Words: {unique_words}")
+        log_info(api_name, f"Lexical Diversity - Unique Words: {unique_words}")
         return score
 
     def structural_pattern_score(response):
@@ -174,8 +193,8 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         most_common_starter, count = starter_counts.most_common(
             1)[0] if starter_counts else ('', 0)
         score = count / len(sentence_starters) if sentence_starters else 1
-        print(
-            f"Sentence Starters: {sentence_starters}, Most Common Starter: '{most_common_starter}'")
+        log_info(api_name,
+                 f"Sentence Starters: {sentence_starters}, Most Common Starter: '{most_common_starter}'")
         return score
 
     def analyze_pos_patterns(response):
@@ -185,7 +204,7 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         template_pos_patterns = ['PRON', 'AUX', 'DET', 'NOUN', 'VERB']
         score = sum(pos_counts.get(pos, 0)
                     for pos in template_pos_patterns) / len(pos_patterns)
-        print(f"POS Pattern Matches: {pos_counts}")
+        log_info(api_name, f"POS Pattern Matches: {pos_counts}")
         return score
 
     def sentence_length_analysis(response):
@@ -198,7 +217,8 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
             len(sentence_lengths) if sentence_lengths else 0
         max_variance = avg_length ** 2
         score = 1 - (variance / max_variance if max_variance != 0 else 0)
-        print(f"Sentence Lengths: {sentence_lengths}, Variance: {variance}")
+        log_info(
+            api_name, f"Sentence Lengths: {sentence_lengths}, Variance: {variance}")
         return score
 
     def check_image_type_and_relationship(response, image_type_vocab, relationship_words):
@@ -223,9 +243,10 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         score = min(total_matches * score_per_match_image_type_and_relationship,
                     max_score_image_type_and_relationship)
 
-        print(
-            f"Image Type Matches: {image_type_matches}, Relationship Word Matches: {relationship_matches}")
-        print(f"Reduction Score: {score:.2f} (from {total_matches} matches)")
+        log_info(api_name,
+                 f"Image Type Matches: {image_type_matches}, Relationship Word Matches: {relationship_matches}")
+        log_info(api_name,
+                 f"Reduction Score: {score:.2f} (from {total_matches} matches)")
 
         return score
 
@@ -234,7 +255,7 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         tags_lemmas = {token.lemma_ for token in nlp(" ".join(tags_list))}
         matched_tags = response_lemmas & tags_lemmas
         score = 1 - (len(matched_tags) / len(tags_list)) if tags_list else 1
-        print(f"Content Relevant Tags Matched: {matched_tags}")
+        log_info(api_name, f"Content Relevant Tags Matched: {matched_tags}")
         return score
 
     def sentence_penalty(response, tags_list):
@@ -250,8 +271,10 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
                     penalty += sentence_penalty_value
                     penalized_sentences.append(sentence.strip())
 
-        print(f"Penalized Sentences (No Tag Matches): {penalized_sentences}")
-        print(f"Penalty Score for Non-Matching Sentences: {penalty:.2f}")
+        log_info(api_name,
+                 f"Penalized Sentences (No Tag Matches): {penalized_sentences}")
+        log_info(
+            api_name, f"Penalty Score for Non-Matching Sentences: {penalty:.2f}")
         return penalty
 
     # Calculate individual scores
@@ -300,22 +323,26 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         sentence_length_score
     weighted_content_score = weights['content_score'] * content_score
 
-    # Print weighted scores
-    print("\nWeighted Scores:")
-    print(
-        f"Weighted Template Phrase Score: {weighted_template_phrase_score:.2f}")
-    print(
-        f"Weighted Keyword Relevancy Score: {weighted_keyword_relevancy_score:.2f}")
-    print(f"Weighted Repetition Score: {weighted_repetition_score:.2f}")
-    print(f"Weighted Uniqueness Score: {weighted_uniqueness_score:.2f}")
-    print(
-        f"Weighted Lexical Diversity Score: {weighted_lexical_diversity_score:.2f}")
-    print(
-        f"Weighted Structural Pattern Score: {weighted_structural_score:.2f}")
-    print(f"Weighted POS Pattern Score: {weighted_pos_pattern_score:.2f}")
-    print(
-        f"Weighted Sentence Length Score: {weighted_sentence_length_score:.2f}")
-    print(f"Weighted Content Relevancy Score: {weighted_content_score:.2f}")
+    # log_info weighted scores
+    log_info(api_name, "\nWeighted Scores:")
+    log_info(api_name,
+             f"Weighted Template Phrase Score: {weighted_template_phrase_score:.2f}")
+    log_info(api_name,
+             f"Weighted Keyword Relevancy Score: {weighted_keyword_relevancy_score:.2f}")
+    log_info(
+        api_name, f"Weighted Repetition Score: {weighted_repetition_score:.2f}")
+    log_info(
+        api_name, f"Weighted Uniqueness Score: {weighted_uniqueness_score:.2f}")
+    log_info(api_name,
+             f"Weighted Lexical Diversity Score: {weighted_lexical_diversity_score:.2f}")
+    log_info(api_name,
+             f"Weighted Structural Pattern Score: {weighted_structural_score:.2f}")
+    log_info(
+        api_name, f"Weighted POS Pattern Score: {weighted_pos_pattern_score:.2f}")
+    log_info(api_name,
+             f"Weighted Sentence Length Score: {weighted_sentence_length_score:.2f}")
+    log_info(
+        api_name, f"Weighted Content Relevancy Score: {weighted_content_score:.2f}")
 
     # Calculate the combined score using weighted values
     combined_score = (
@@ -330,16 +357,16 @@ def compute_template_score(response, image_type, tags, template_phrases, relevan
         weighted_content_score
     ) / sum(weights.values())
 
-    print(
-        f"\nCombined Weighted Score (before reduction): {combined_score:.2f}")
+    log_info(api_name,
+             f"\nCombined Weighted Score (before reduction): {combined_score:.2f}")
     # Apply reduction and final normalization
     combined_score = max(0, combined_score - reduction_score + penalty_score)
-    combined_score = min(combined_score, 1)
+    combined_score = round(min(combined_score, 1), 2)
 
-    print(
-        f"Reduction Score (Image Type and Relationship): {reduction_score:.2f}")
-    print(f"Penalty Score (No Tag Matches): {penalty_score:.2f}")
-    print(f"Final Combined Score: {combined_score:.2f}")
+    log_info(api_name,
+             f"Reduction Score (Image Type and Relationship): {reduction_score:.2f}")
+    log_info(api_name, f"Penalty Score (No Tag Matches): {penalty_score:.2f}")
+    log_info(api_name, f"Final Combined Score: {combined_score}")
 
     # Set the template confidence as the final combined score
     template_confidence = combined_score
@@ -381,22 +408,16 @@ image_type = "bar_chart"
 
 tags = "vehicle, collision, frequency, accident, blue, green, red, white, black, grey, high, low, comparison, involvement, statistics, traffic, safety, analysis"
 
-# Compute the template confidence score
-template_confidence = compute_template_score(
-    response_text, image_type, tags, template_phrases, relevant_keywords)
-
-percentage_score = template_confidence * 100
-print(
-    f"\nConfidence score that the response is templated: {percentage_score:.2f}%")
 
 # Interpret the result
-if template_confidence >= 0.65:
-    print("The response is templated.")
-elif template_confidence >= 0.55:
-    print("The response may be probably templated.")
-elif template_confidence >= 0.45:
-    print("The response may be likely templated.")
-elif template_confidence >= 0.38:
-    print("The response may be templated.")
-else:
-    print("The response is likely original.")
+def interpret_template_score(percentage_score):
+    if percentage_score >= 0.65:
+        return "The response is templated."
+    elif percentage_score >= 0.55:
+        return "The response may be probably templated."
+    elif percentage_score >= 0.45:
+        return "The response may be likely templated."
+    elif percentage_score >= 0.38:
+        return "The response may be templated."
+    else:
+        return "The response is likely original."

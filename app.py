@@ -10,6 +10,31 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Define a mapping for dynamic routing based on action and qtype
+MODULE_PATHS = {
+    "speak_words": "speak_words.main",
+    "template_checker": {
+        "di": "template_checker.di_template_checker",
+        "rl": "template_checker.rl_template_checker"
+    }
+}
+
+
+def get_module_path(action, qtype=None):
+    """Return module path based on action and qtype."""
+    if action not in MODULE_PATHS:
+        raise ValueError(f"Invalid action '{action}'")
+
+    # For template_checker, we check for qtype to choose the correct module
+    if action == "template_checker":
+        if qtype not in MODULE_PATHS[action]:
+            raise ValueError(
+                f"Invalid qtype '{qtype}' for action 'template_checker'")
+        return MODULE_PATHS[action][qtype]
+
+    # Return direct module path if action is not template_checker
+    return MODULE_PATHS[action]
+
 
 @app.route('/api', methods=['POST'])
 def route_request():
@@ -35,26 +60,18 @@ def route_request():
         tags = data.get("tags")
 
         # Determine module path based on action and qtype
-        if action == "speak_words":
-            module_path = "speak_words.main"
-            api_name = "speak_words"
-        elif action == "template_checker":
-            if qtype == "di":
-                module_path = "template_checker.di_template_checker"
-                api_name = "di_template_checker"
-            elif qtype == "rl":
-                module_path = "template_checker.rl_template_checker"
-                api_name = "rl_template_checker"
-            else:
-                raise ValueError("Invalid qtype")
-        else:
-            raise ValueError("Invalid action")
+        try:
+            module_path = get_module_path(action, qtype)
+            api_name = action if action != "template_checker" else f"{action}_{qtype}"
+        except ValueError as e:
+            log_error(str(e))
+            return jsonify({"error": str(e)}), 400
 
         # Log action details
         log_info(
             api_name, f"Processing request with action '{action}' and qtype '{qtype}'")
 
-        # Import the module dynamically
+        # Import the module dynamically and call the process_request function
         module = importlib.import_module(module_path)
 
         # Try to call process_request and catch any errors that occur

@@ -2,11 +2,12 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.backends import default_backend
 from dotenv import load_dotenv
-from mod_logging import log_error  # Import error logging
+from utils.mod_logging import log_error
 import os
 import base64
 import json
 
+# command to run: sgb@SGBs-Laptop pte_api % python3 -m utils.encryption
 # Load environment variables from .env file
 load_dotenv()
 
@@ -27,76 +28,72 @@ else:
     raise ValueError("SECRET_KEY not found")
 
 
-def base64_urlsafe_encode(data):
-    """Encode data in URL-safe base64."""
-    return base64.urlsafe_b64encode(data).decode('utf-8')
+def base64_encode_with_padding(data):
+    """Encode data in base64 with enforced padding."""
+    encoded_data = base64.urlsafe_b64encode(data)
+    # Ensure the encoded data length is a multiple of 4 by adding `=` padding
+    return encoded_data + b'=' * (-len(encoded_data) % 4)
 
 
-def base64_urlsafe_decode(data):
-    """Decode data from URL-safe base64."""
-    return base64.urlsafe_b64decode(data)
+def base64_decode_with_padding(data):
+    """Decode base64 data with ensured padding."""
+    # Add `=` padding if necessary
+    padded_data = data + b'=' * (-len(data) % 4)
+    return base64.urlsafe_b64decode(padded_data)
 
 
 def encrypt_data(data):
     """Encrypt data using AES-256-CBC with HMAC-SHA256 for integrity."""
-    try:
-        iv = os.urandom(16)
-        padding_length = 16 - (len(data) % 16)
-        padded_data = data + chr(padding_length) * padding_length
+    iv = os.urandom(16)
+    padding_length = 16 - (len(data) % 16)
+    padded_data = data + chr(padding_length) * padding_length
 
-        cipher = Cipher(algorithms.AES(SECRET_KEY),
-                        modes.CBC(iv), backend=default_backend())
-        encryptor = cipher.encryptor()
-        ciphertext = encryptor.update(
-            padded_data.encode()) + encryptor.finalize()
+    cipher = Cipher(algorithms.AES(SECRET_KEY),
+                    modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(padded_data.encode()) + encryptor.finalize()
 
-        hmac_obj = hmac.HMAC(SECRET_KEY, hashes.SHA256(),
-                             backend=default_backend())
-        hmac_obj.update(iv + ciphertext)
-        hmac_value = hmac_obj.finalize()
+    hmac_obj = hmac.HMAC(SECRET_KEY, hashes.SHA256(),
+                         backend=default_backend())
+    hmac_obj.update(iv + ciphertext)
+    hmac_value = hmac_obj.finalize()
 
-        encrypted_data = base64_urlsafe_encode(iv + ciphertext + hmac_value)
-        return encrypted_data
-    except Exception as e:
-        log_error(f"Encryption failed: {str(e)}")
-        raise ValueError("Encryption failed") from e
+    # Use the new base64 encoding function to enforce padding
+    encrypted_data = base64_encode_with_padding(iv + ciphertext + hmac_value)
+    # Convert bytes to string for easier handling
+    return encrypted_data.decode('utf-8')
 
 
 def decrypt_data(token):
     """Decrypt data encrypted with AES-256-CBC and HMAC-SHA256."""
-    try:
-        decoded_data = base64_urlsafe_decode(token)
-        iv = decoded_data[:16]
-        ciphertext = decoded_data[16:-32]
-        hmac_value = decoded_data[-32:]
+    # Decode with ensured padding
+    decoded_data = base64_decode_with_padding(token.encode('utf-8'))
 
-        hmac_obj = hmac.HMAC(SECRET_KEY, hashes.SHA256(),
-                             backend=default_backend())
-        hmac_obj.update(iv + ciphertext)
-        hmac_obj.verify(hmac_value)
+    iv = decoded_data[:16]
+    ciphertext = decoded_data[16:-32]
+    hmac_value = decoded_data[-32:]
 
-        cipher = Cipher(algorithms.AES(SECRET_KEY),
-                        modes.CBC(iv), backend=default_backend())
-        decryptor = cipher.decryptor()
-        padded_data = decryptor.update(ciphertext) + decryptor.finalize()
+    hmac_obj = hmac.HMAC(SECRET_KEY, hashes.SHA256(),
+                         backend=default_backend())
+    hmac_obj.update(iv + ciphertext)
+    hmac_obj.verify(hmac_value)
 
-        padding_length = padded_data[-1]
-        data = padded_data[:-padding_length].decode()
-        return data
-    except Exception as e:
-        log_error(f"Decryption failed: {str(e)}")
-        raise ValueError("Decryption failed") from e
+    cipher = Cipher(algorithms.AES(SECRET_KEY),
+                    modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    padded_data = decryptor.update(ciphertext) + decryptor.finalize()
+
+    padding_length = padded_data[-1]
+    data = padded_data[:-padding_length].decode()
+    return data
 
 
 # Example usage
 if __name__ == "__main__":
-    sample_data = "Sensitive information"
-    try:
-        encrypted = encrypt_data(sample_data)
-        print("Encrypted:", encrypted)
+    # Test data
+    test_data = json.dumps({"sample": "data"})
+    encrypted = encrypt_data(test_data)
+    print("Encrypted:", encrypted)
 
-        decrypted = decrypt_data(encrypted)
-        print("Decrypted:", decrypted)
-    except Exception as e:
-        log_error(f"Error in example usage: {str(e)}")
-        print("An error occurred:", e)
+    decrypted = decrypt_data(encrypted)
+    print("Decrypted:", decrypted)

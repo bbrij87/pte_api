@@ -3,34 +3,53 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - main # Adjust the branch name if needed
+      - main
   pull_request:
     branches:
       - main
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out the repository
+      - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      - name: Set up Python
+        uses: actions/setup-python@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          python-version: "3.11"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+      - name: Install pip and pipreqs
+        run: |
+          python -m pip install --upgrade pip
+          pip install pipreqs
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v2
+      - name: Generate minimal requirements.txt
+        run: |
+          pipreqs ./ --force
+        # The requirements.txt file will be generated based on the imports in your codebase.
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
         with:
-          context: .
-          push: true
-          tags: your_dockerhub_username/your_image_name:latest
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
-      - name: Log out from Docker Hub
-        run: docker logout
+      - name: Install dependencies from minimal requirements.txt
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          python -m unittest discover
+
+      - name: Archive artifacts (optional)
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: ./test-reports/

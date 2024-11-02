@@ -3,10 +3,7 @@ from utils.mod_logging import log_error, log_info
 from utils.encryption import decrypt_data, encrypt_data
 import importlib
 import json
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
 
 app = Flask(__name__)
 

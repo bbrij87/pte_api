@@ -1,17 +1,8 @@
-# Environment and credentials
-.env
-
-# Logs
+secret/
 logs/
-log_tts.log
-
-# Audio files
 ttsaudio/
-
-# Python cache and virtual environments
 __pycache__/
 *.py[cod]
 .Python
 venv/
-
-idyllic-folio-368903-e003f40e6661.json
+*.log

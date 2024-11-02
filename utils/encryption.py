@@ -9,7 +9,7 @@ import json
 
 # command to run: sgb@SGBs-Laptop pte_api % python3 -m utils.encryption
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join('secret', '.env'))
 
 # Fetch the Base64-encoded secret key from environment variables
 encoded_key = os.getenv("SECRET_KEY")

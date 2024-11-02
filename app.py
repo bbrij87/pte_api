@@ -1,11 +1,28 @@
 from flask import Flask, request, jsonify
 from utils.mod_logging import log_error, log_info
 from utils.encryption import decrypt_data, encrypt_data
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from jsonschema import validate, ValidationError
 import importlib
 import json
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
 
+# Initialize Flask application
 app = Flask(__name__)
+
+# Set up Flask-Limiter for rate limiting
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["30000 per hour"]  # Set global limits here
+)
+
+# Define payload size limit in bytes (e.g., 1MB)
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1MB
 
 # Define a mapping for dynamic routing based on action and qtype
 MODULE_PATHS = {
@@ -15,6 +32,34 @@ MODULE_PATHS = {
         "rl": "template_checker.rl_template_checker"
     }
 }
+
+# Define JSON schema for input validation
+request_schema = {
+    "type": "object",
+    "properties": {
+        "request_id": {"type": "string"},
+        "hostname": {"type": "string"},
+        "username": {"type": "string"},
+        "qid": {"type": "string"},
+        "action": {"type": "string"},
+        "qtype": {"type": ["string", "null"]},
+        "qtext": {"type": ["string", "null"]},
+        "tags": {"type": ["string", "null"]},
+        "image_type": {"type": ["string", "null"]},
+        "response_text": {"type": ["string", "null"]}
+    },
+    # Only these fields are required
+    "required": ["request_id", "hostname", "username", "qid"],
+    "additionalProperties": False  # No extra fields allowed
+}
+
+
+def validate_request_data(data):
+    """Validate request data against the JSON schema."""
+    try:
+        validate(instance=data, schema=request_schema)
+    except ValidationError as e:
+        raise ValueError(f"Invalid input: {e.message}")
 
 
 def get_module_path(action, qtype=None):
@@ -34,6 +79,8 @@ def get_module_path(action, qtype=None):
 
 
 @app.route('/api', methods=['POST'])
+# Limit this endpoint to 10 requests per minute
+@limiter.limit("10 per minute")
 def route_request():
     try:
         # Get encrypted data from request and decrypt it
@@ -47,17 +94,10 @@ def route_request():
         decrypted_data = decrypt_data(encrypted_data)
         data = json.loads(decrypted_data)
 
-        # Mandatory parameters
-        required_params = ["request_id", "hostname", "username", "qid"]
-        missing_params = [
-            param for param in required_params if param not in data or not data[param]]
+        # Validate input data against JSON schema
+        validate_request_data(data)
 
-        if missing_params:
-            missing_params_str = ", ".join(missing_params)
-            error_message = f"Missing mandatory parameters: {missing_params_str}"
-            log_error(error_message)
-            return jsonify({"error": "error_code_pmissing"}), 400
-
+        # Extract mandatory parameters
         request_id = data["request_id"]
         hostname = data["hostname"]
         username = data["username"]
@@ -83,7 +123,7 @@ def route_request():
 
         # Log action details
         log_info(
-            api_name, f"Passing request with action '{action}' and qtype '{qtype} to module '{module_path}'")
+            api_name, f"Passing request with action '{action}' and qtype '{qtype}' to module '{module_path}'")
 
         # Import the module dynamically and call the process_request function
         module = importlib.import_module(module_path)
@@ -108,7 +148,7 @@ def route_request():
         # Call process_request with the prepared arguments
         try:
             response = module.process_request(**process_request_kwargs)
-            print("Response before encryption:", response)
+            log_info(api_name, f"Response before encryption: {response}")
         except Exception as e:
             log_error(f"Error in process_request: {e}")
             return jsonify({"error": "Error in processing request"}), 500
@@ -123,6 +163,9 @@ def route_request():
             api_name, f"Returning encrypted response: {encrypted_response}")
         return jsonify({"data": encrypted_response})
 
+    except ValueError as e:
+        log_error(f"Validation Error: {e}")
+        return jsonify({"error": "Invalid input"}), 400
     except Exception as e:
         log_error(f"Error processing request: {str(e)}")
         return jsonify({"error": "An internal server error occurred"}), 500

@@ -255,11 +255,11 @@ sortedcontainers==2.4.0
 soundfile==0.12.1
 soupsieve==2.4.1
 soxr==0.3.7
-spacy==3.5.4
-spacy-alignments==0.9.0
-spacy-legacy==3.0.12
-spacy-loggers==1.0.4
-spacy-transformers==1.2.5
+spacy
+spacy-alignments
+spacy-legacy
+spacy-loggers
+spacy-transformers
 SQLAlchemy==2.0.21
 srsly==2.4.6
 stack-data==0.6.2
@@ -291,7 +291,7 @@ torchvision==0.15.2
 tornado==6.3.2
 tqdm==4.65.0
 traitlets==5.9.0
-transformers==4.35.2
+transformers
 trio==0.26.2
 trio-websocket==0.11.1
 typer==0.9.0

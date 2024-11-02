@@ -84,12 +84,12 @@ google-auth-oauthlib==1.0.0
 google-cloud-texttospeech==2.20.0
 google-pasta==0.2.0
 googleapis-common-protos==1.60.0
-googletrans==4.0.0rc1
+googletrans
 gprofiler-official==1.0.0
-gradio==3.45.2
-gradio_client==0.5.3
-grpcio==1.67.1
-grpcio-status==1.62.3
+gradio
+gradio_client
+grpcio
+grpcio-status
 h11
 h2
 h5py
@@ -186,7 +186,7 @@ Pillow==9.5.0
 platformdirs==3.8.1
 pooch==1.7.0
 preshed==3.0.8
-prisma==0.10.0
+prisma
 prompt-toolkit==3.0.39
 proto-plus==1.25.0
 protobuf==4.23.4
